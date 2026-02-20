@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <video ></video>
+</body>
+
+<script>
+navigator.mediaDevices.enumerateDevices()
+    .then((deviceInfo) => {
+        let arr = [];
+        // For each source, create a message to be logged so we can identify it.
+        deviceInfo.forEach(item => {
+            let message = '';
+            if (item.kind === 'audioinput') {
+                message += 'Microphone: ' + item.label;
+            } else if (item.kind === 'audiooutput') {
+                message += 'Speaker '+ item.label
+            } else if (item.kind === 'videoinput') {
+                message += 'Video: ' + item.label
+            }
+            message += ' ID: ' + item.deviceId;
+            arr.push(message);
+        });
+        console.log(arr);
+    })
+    .catch(error => {
+        console.error(error);
+});
+</script>
+
+<script>
+let constraints = {
+  audio: true,
+  video: {
+
+    // we need Decklink Video Capture, and not blackmagic wdm capture
+
+    // we need to select also Decklink Video Capture while asks permision
+      deviceId: "3530c2b405b9d44b850ff3286e71df9b58f7f62d2d3d346920db74973a116a7d",
+      width: 1920,
+      height: 1080,
+      frameRate:25
+  }
+};
+navigator.mediaDevices.getUserMedia(constraints)
+.then(function(stream) {
+  
+    const videoTracks = stream.getVideoTracks();
+    const video = document.querySelector('video');
+    stream.onremovetrack = function() {
+        // Do something about the stream ending
+    };
+    window.stream = stream; 
+    if ("srcObject" in video) {
+        video.srcObject = stream;
+    } else {
+        video.src = window.URL.createObjectURL(stream);
+    }
+    video.onloadedmetadata = function(e) {
+        video.play();
+    };
+})
+.catch(function(error) {
+    if (error.name === 'ConstraintNotSatisfiedError') console.error(
+        'The resolution ' + constraints.video.width.exact + 'x' +
+        constraints.video.width.exact + ' px is not supported by your device.'
+    );
+    if (error.name === 'PermissionDeniedError') console.error(
+        'Permissions have not been granted to use your camera and ' +
+        'microphone, you need to allow the page access to your devices in ' +
+        'order for the demo to work.'
+    );
+    console.error(error)
+});
+</script>
+</html>
