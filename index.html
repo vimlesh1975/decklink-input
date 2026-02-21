@@ -3,79 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Decklink ID Selector</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; line-height: 1.6; }
+        .control-panel { background: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; border-radius: 10px; max-width: 600px; margin: 0 auto; }
+        select { width: 100%; padding: 10px; margin: 15px 0; border-radius: 5px; border: 1px solid #ccc; }
+        button { background-color: #28a745; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; font-weight: bold; width: 100%; }
+        button:hover { background-color: #218838; }
+        video { width: 100%; max-width: 960px; margin-top: 30px; background: #000; display: none; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .id-display { font-size: 0.8em; color: #666; word-break: break-all; margin-top: 5px; }
+    </style>
 </head>
 <body>
-    <video ></video>
-</body>
+
+<div class="control-panel">
+    <h3>Video Input Selection</h3>
+    <label for="videoSource">Choose Device:</label>
+    <select id="videoSource"></select>
+    <div id="selectedIdDisplay" class="id-display">ID: (Select a device)</div>
+    <br>
+    <button id="startBtn">Initialize Stream</button>
+</div>
+
+<div style="text-align: center;">
+    <video id="videoPlayer" playsinline autoplay></video>
+</div>
 
 <script>
-navigator.mediaDevices.enumerateDevices()
-    .then((deviceInfo) => {
-        let arr = [];
-        // For each source, create a message to be logged so we can identify it.
-        deviceInfo.forEach(item => {
-            let message = '';
-            if (item.kind === 'audioinput') {
-                message += 'Microphone: ' + item.label;
-            } else if (item.kind === 'audiooutput') {
-                message += 'Speaker '+ item.label
-            } else if (item.kind === 'videoinput') {
-                message += 'Video: ' + item.label
+const videoSelect = document.getElementById('videoSource');
+const startBtn = document.getElementById('startBtn');
+const video = document.getElementById('videoPlayer');
+const idDisplay = document.getElementById('selectedIdDisplay');
+
+/**
+ * 1. Populate the Combo Box with Names and IDs
+ */
+async function loadDevices() {
+    try {
+        // Trigger a temporary prompt to get permissions so labels aren't blank
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop()); // Stop temp stream immediately
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        
+        videoSelect.innerHTML = ''; 
+        
+        devices.forEach(device => {
+            if (device.kind === 'videoinput') {
+                const option = document.createElement('option');
+                option.value = device.deviceId; // This is the ID we need
+                option.text = device.label || `Unknown Device (${device.deviceId.substring(0,5)}...)`;
+                videoSelect.appendChild(option);
             }
-            message += ' ID: ' + item.deviceId;
-            arr.push(message);
         });
-        console.log(arr);
-    })
-    .catch(error => {
-        console.error(error);
-});
-</script>
 
-<script>
-let constraints = {
-  audio: true,
-  video: {
+        // Update ID display when user changes selection
+        videoSelect.onchange = () => {
+            idDisplay.innerText = "Target ID: " + videoSelect.value;
+        };
+        
+        // Trigger initial display
+        if(videoSelect.options.length > 0) videoSelect.onchange();
 
-    // we need Decklink Video Capture, and not blackmagic wdm capture
-
-    // we need to select also Decklink Video Capture while asks permision
-      deviceId: "3530c2b405b9d44b850ff3286e71df9b58f7f62d2d3d346920db74973a116a7d",
-      width: 1920,
-      height: 1080,
-      frameRate:25
-  }
-};
-navigator.mediaDevices.getUserMedia(constraints)
-.then(function(stream) {
-  
-    const videoTracks = stream.getVideoTracks();
-    const video = document.querySelector('video');
-    stream.onremovetrack = function() {
-        // Do something about the stream ending
-    };
-    window.stream = stream; 
-    if ("srcObject" in video) {
-        video.srcObject = stream;
-    } else {
-        video.src = window.URL.createObjectURL(stream);
+    } catch (err) {
+        console.error("Initialization error:", err);
+        alert("Could not list devices. Ensure you are on HTTPS and have granted permissions.");
     }
-    video.onloadedmetadata = function(e) {
-        video.play();
+}
+
+/**
+ * 2. Start the video using the specific selected ID
+ */
+async function startStream() {
+    const targetId = videoSelect.value; // The selected ID from the combo box
+    
+    if (!targetId) {
+        alert("Please select a device first.");
+        return;
+    }
+
+    // Stop existing stream if it exists to free up the hardware
+    if (window.stream) {
+        window.stream.getTracks().forEach(track => track.stop());
+    }
+
+    // Strict constraints for Decklink
+    const constraints = {
+        audio: true,
+        video: {
+            deviceId: { exact: targetId }, // Apply the ID from the select box
+            width: 1920,
+            height: 1080,
+            frameRate: 25
+        }
     };
-})
-.catch(function(error) {
-    if (error.name === 'ConstraintNotSatisfiedError') console.error(
-        'The resolution ' + constraints.video.width.exact + 'x' +
-        constraints.video.width.exact + ' px is not supported by your device.'
-    );
-    if (error.name === 'PermissionDeniedError') console.error(
-        'Permissions have not been granted to use your camera and ' +
-        'microphone, you need to allow the page access to your devices in ' +
-        'order for the demo to work.'
-    );
-    console.error(error)
-});
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        window.stream = stream;
+        video.srcObject = stream;
+        
+        video.style.display = "block";
+        video.onloadedmetadata = () => video.play();
+        
+        console.log("Stream started with ID:", targetId);
+    } catch (error) {
+        console.error("Stream Error:", error);
+        alert("Error: " + error.name + "\nThis often happens if the device is busy or format is unsupported.");
+    }
+}
+
+// Initial Load
+loadDevices();
+
+// Event Listener
+startBtn.addEventListener('click', startStream);
 </script>
+
+</body>
 </html>
