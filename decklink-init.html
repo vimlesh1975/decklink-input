@@ -88,11 +88,17 @@
         <select id="videoSource"></select>
         <div id="selectedIdDisplay" class="id-display">ID: (Select a device)</div>
         <br>
+        <!-- controls -->
         <button id="startBtn">Initialize Stream</button>
         <button id="muteBtn" style="margin-top:10px; background-color:#007bff;">
             Unmute Audio
         </button>
-<button id="recordBtn" style="background:#dc3545;">Start Recording</button>
+        <button id="recordBtn" style="background:#dc3545;">Start Recording</button>
+        <!-- duration dropdown immediately left of continuous button -->
+        <div style="display:inline-block; vertical-align:middle;">
+            <select id="durationSelect" style="width:70px; padding:5px; font-size:0.9em;"></select>
+        </div>
+        <button id="continuousRecordBtn" style="background:#6f42c1; margin-top:10px; padding:5px 8px; font-size:0.9em; width:auto;">Start Continuous (min)</button>
     </div>
 
     <div style="text-align: center;">
@@ -107,9 +113,88 @@
         const muteBtn = document.getElementById('muteBtn');
 
         const recordBtn = document.getElementById('recordBtn');
+        const durationSelect = document.getElementById('durationSelect');
+        let selectedDuration = 1; // minutes (default)
 
 let mediaRecorder;
 let recordedChunks = [];
+let continuousMediaRecorder = null;
+let isContinuousRecording = false;
+
+const continuousRecordBtn = document.getElementById('continuousRecordBtn');
+
+continuousRecordBtn.addEventListener("click", () => {
+    if (!window.stream) {
+        alert("Start the stream first");
+        return;
+    }
+
+    if (!isContinuousRecording) {
+        // START continuous recording
+        isContinuousRecording = true;
+        continuousRecordBtn.innerText = `Stop Continuous (${selectedDuration}min)`;
+        continuousRecordBtn.style.backgroundColor = "#6c757d";
+        recordNextSegment();
+    } else {
+        // STOP continuous recording
+        isContinuousRecording = false;
+        if (continuousMediaRecorder && continuousMediaRecorder.state === "recording") {
+            continuousMediaRecorder.stop();
+        }
+        continuousRecordBtn.innerText = `Start Continuous (${selectedDuration}min)`;
+        continuousRecordBtn.style.backgroundColor = "#6f42c1";
+    }
+});
+
+function recordNextSegment() {
+    if (!isContinuousRecording || !window.stream) return;
+
+    let continuousChunks = [];
+    let mimeType = "video/webm;codecs=vp9,opus";
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = "video/webm";
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = "video/mp4";
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = "";
+            }
+        }
+    }
+
+    continuousMediaRecorder = new MediaRecorder(window.stream, { mimeType });
+
+    continuousMediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+            continuousChunks.push(event.data);
+        }
+    };
+
+    continuousMediaRecorder.onstop = () => {
+        const blob = new Blob(continuousChunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${timestamp}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        // automatically start next segment if still recording
+        if (isContinuousRecording) {
+            recordNextSegment();
+        }
+    };
+
+    continuousMediaRecorder.start();
+    
+    // stop after selected duration
+    setTimeout(() => {
+        if (continuousMediaRecorder && continuousMediaRecorder.state === "recording") {
+            continuousMediaRecorder.stop();
+        }
+    }, selectedDuration * 60 * 1000);
+}
+
 recordBtn.addEventListener("click", () => {
 
     if (!window.stream) {
@@ -211,8 +296,27 @@ recordBtn.addEventListener("click", () => {
                     idDisplay.innerText = "Target ID: " + videoSelect.value;
                 };
 
+                // populate duration dropdown (1 through 60 minutes)
+                durationSelect.innerHTML = '';
+                for (let i = 1; i <= 60; i++) {
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.text = `${i}`;
+                    if (i === selectedDuration) opt.selected = true;
+                    durationSelect.appendChild(opt);
+                }
+
+                durationSelect.onchange = () => {
+                    selectedDuration = parseInt(durationSelect.value, 10);
+                    // update button text to reflect new duration
+                    continuousRecordBtn.innerText = isContinuousRecording ?
+                        `Stop Continuous (${selectedDuration}min)` :
+                        `Start Continuous (${selectedDuration}min)`;
+                };
+
                 // Trigger initial display
                 if (videoSelect.options.length > 0) videoSelect.onchange();
+
 
             } catch (err) {
                 console.error("Initialization error:", err);
