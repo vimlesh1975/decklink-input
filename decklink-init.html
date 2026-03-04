@@ -114,7 +114,9 @@
 
         const recordBtn = document.getElementById('recordBtn');
         const durationSelect = document.getElementById('durationSelect');
-        let selectedDuration = 1; // minutes (default)
+        // store duration as seconds and a human-friendly label
+        let selectedDurationSeconds = 60; // default 1 minute
+        let selectedDurationLabel = '1 min';
 
 let mediaRecorder;
 let recordedChunks = [];
@@ -132,7 +134,7 @@ continuousRecordBtn.addEventListener("click", () => {
     if (!isContinuousRecording) {
         // START continuous recording
         isContinuousRecording = true;
-        continuousRecordBtn.innerText = `Stop Continuous (${selectedDuration}min)`;
+        continuousRecordBtn.innerText = `Stop Continuous (${selectedDurationLabel})`;
         continuousRecordBtn.style.backgroundColor = "#6c757d";
         recordNextSegment();
     } else {
@@ -141,7 +143,7 @@ continuousRecordBtn.addEventListener("click", () => {
         if (continuousMediaRecorder && continuousMediaRecorder.state === "recording") {
             continuousMediaRecorder.stop();
         }
-        continuousRecordBtn.innerText = `Start Continuous (${selectedDuration}min)`;
+        continuousRecordBtn.innerText = `Start Continuous (${selectedDurationLabel})`;
         continuousRecordBtn.style.backgroundColor = "#6f42c1";
     }
 });
@@ -192,7 +194,7 @@ function recordNextSegment() {
         if (continuousMediaRecorder && continuousMediaRecorder.state === "recording") {
             continuousMediaRecorder.stop();
         }
-    }, selectedDuration * 60 * 1000);
+    }, selectedDurationSeconds * 1000);
 }
 
 recordBtn.addEventListener("click", () => {
@@ -296,22 +298,35 @@ recordBtn.addEventListener("click", () => {
                     idDisplay.innerText = "Target ID: " + videoSelect.value;
                 };
 
-                // populate duration dropdown (1 through 60 minutes)
+                // populate duration dropdown: 10 sec plus 1 through 60 minutes
                 durationSelect.innerHTML = '';
+                // ten seconds option
+                let opt = document.createElement('option');
+                opt.value = 10; // seconds
+                opt.text = '10 sec';
+                if (selectedDurationSeconds === 10) opt.selected = true;
+                durationSelect.appendChild(opt);
+
                 for (let i = 1; i <= 60; i++) {
-                    const opt = document.createElement('option');
-                    opt.value = i;
-                    opt.text = `${i}`;
-                    if (i === selectedDuration) opt.selected = true;
+                    opt = document.createElement('option');
+                    opt.value = i * 60; // seconds
+                    opt.text = `${i} min`;
+                    if (selectedDurationSeconds === i * 60) opt.selected = true;
                     durationSelect.appendChild(opt);
                 }
 
                 durationSelect.onchange = () => {
-                    selectedDuration = parseInt(durationSelect.value, 10);
-                    // update button text to reflect new duration
+                    selectedDurationSeconds = parseInt(durationSelect.value, 10);
+                    // compute human label
+                    if (selectedDurationSeconds === 10) {
+                        selectedDurationLabel = '10 sec';
+                    } else {
+                        selectedDurationLabel = `${selectedDurationSeconds / 60} min`;
+                    }
+                    // update button text
                     continuousRecordBtn.innerText = isContinuousRecording ?
-                        `Stop Continuous (${selectedDuration}min)` :
-                        `Start Continuous (${selectedDuration}min)`;
+                        `Stop Continuous (${selectedDurationLabel})` :
+                        `Start Continuous (${selectedDurationLabel})`;
                 };
 
                 // Trigger initial display
@@ -341,7 +356,7 @@ recordBtn.addEventListener("click", () => {
             }
 
             // Strict constraints for Decklink
-            const constraints = { audio: { sampleRate: 48000, channelCount: 2, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: { deviceId: { exact: targetId }, width: 1920, height: 1080, frameRate: { ideal: 25 } } };
+            const constraints = { audio: { sampleRate: 48000, channelCount: 2, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: { deviceId: { exact: targetId } } };
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
