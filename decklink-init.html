@@ -122,7 +122,17 @@ recordBtn.addEventListener("click", () => {
 
         recordedChunks = [];
 
-        const mimeType = "video/webm;codecs=vp9,opus";
+        // Detect supported mime type with fallback
+        let mimeType = "video/webm;codecs=vp9,opus";
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = "video/webm";
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = "video/mp4";
+                if (!MediaRecorder.isTypeSupported(mimeType)) {
+                    mimeType = ""; // Let browser choose
+                }
+            }
+        }
 
         mediaRecorder = new MediaRecorder(window.stream, { mimeType });
 
@@ -247,7 +257,22 @@ recordBtn.addEventListener("click", () => {
                 console.log("Audio:", aTrack.getSettings());
             } catch (error) {
                 console.error("Stream Error:", error);
-                alert("Error: " + error.name + "\nThis often happens if the device is busy or format is unsupported.");
+                // Try fallback constraints with lower resolution
+                try {
+                    const fallbackConstraints = {
+                        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+                        video: { deviceId: { exact: targetId }, width: 1280, height: 720, frameRate: { ideal: 30 } }
+                    };
+                    const fallbackStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                    window.stream = fallbackStream;
+                    video.srcObject = fallbackStream;
+                    video.style.display = "block";
+                    video.onloadedmetadata = () => video.play();
+                    console.log("Stream started with fallback constraints");
+                } catch (fallbackError) {
+                    console.error("Stream Error:", error);
+                    alert("Error: " + error.name + "\nTried fallback constraints but still failed.");
+                }
             }
         }
 
@@ -256,14 +281,6 @@ recordBtn.addEventListener("click", () => {
 
         // Event Listener
         startBtn.addEventListener('click', startStream);
-
-        stopBtn.addEventListener("click", () => {
-
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-    }
-
-});
     </script>
 
 </body>
