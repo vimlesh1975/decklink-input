@@ -93,13 +93,6 @@
             Unmute Audio
         </button>
 <button id="recordBtn" style="background:#dc3545;">Start Recording</button>
-<button id="stopBtn" style="background:#6c757d;">Stop Recording</button>
-
-<select id="formatSelect">
-    <option value="webm">WebM (VP9 + Opus)</option>
-    <option value="mp4">MP4 (H264 + AAC if supported)</option>
-</select>
-
     </div>
 
     <div style="text-align: center;">
@@ -114,12 +107,9 @@
         const muteBtn = document.getElementById('muteBtn');
 
         const recordBtn = document.getElementById('recordBtn');
-const stopBtn = document.getElementById('stopBtn');
-const formatSelect = document.getElementById('formatSelect');
 
 let mediaRecorder;
 let recordedChunks = [];
-
 recordBtn.addEventListener("click", () => {
 
     if (!window.stream) {
@@ -127,50 +117,49 @@ recordBtn.addEventListener("click", () => {
         return;
     }
 
-    recordedChunks = [];
+    // If recorder not started → START
+    if (!mediaRecorder || mediaRecorder.state === "inactive") {
 
-    let mimeType;
+        recordedChunks = [];
 
-    if (formatSelect.value === "mp4") {
-        mimeType = "video/mp4;codecs=h264,aac";
-    } else {
-        mimeType = "video/webm;codecs=vp9,opus";
-    }
+        const mimeType = "video/webm;codecs=vp9,opus";
 
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-        alert("Format not supported in this browser");
-        return;
-    }
+        mediaRecorder = new MediaRecorder(window.stream, { mimeType });
 
-    mediaRecorder = new MediaRecorder(window.stream, { mimeType });
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                recordedChunks.push(event.data);
+            }
+        };
 
-    mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-            recordedChunks.push(event.data);
-        }
-    };
+        mediaRecorder.onstop = () => {
 
-    mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: mimeType });
+            const url = URL.createObjectURL(blob);
 
-        const blob = new Blob(recordedChunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-
-        const a = document.createElement("a");
-        a.href = url;
-
-        if (formatSelect.value === "mp4") {
-            a.download = "decklink_recording.mp4";
-        } else {
+            const a = document.createElement("a");
+            a.href = url;
             a.download = "decklink_recording.webm";
-        }
+            a.click();
 
-        a.click();
-        URL.revokeObjectURL(url);
-    };
+            URL.revokeObjectURL(url);
+        };
 
-    mediaRecorder.start();
+        mediaRecorder.start();
+
+        recordBtn.innerText = "Stop Recording";
+        recordBtn.style.backgroundColor = "#6c757d";
+
+    } else {
+
+        // STOP recording
+        mediaRecorder.stop();
+
+        recordBtn.innerText = "Start Recording";
+        recordBtn.style.backgroundColor = "#dc3545";
+    }
+
 });
-
         muteBtn.addEventListener('click', () => {
             if (!video.srcObject) return; // No stream yet
 
